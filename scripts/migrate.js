@@ -1,5 +1,6 @@
 const { Pool } = require('pg')
-const pool = new Pool({ connectionString: 'postgresql://postgres:Kabondo%400788531388@db.ykezmltclnblpgpopezo.supabase.co:5432/postgres?sslmode=require' })
+require('dotenv').config({ path: '.env.local' })
+const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
 async function run() {
   const client = await pool.connect()
   try {

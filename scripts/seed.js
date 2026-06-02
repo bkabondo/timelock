@@ -1,5 +1,10 @@
 const { createClient } = require('@supabase/supabase-js')
-const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY,{auth:{autoRefreshToken:false,persistSession:false}})
+require('dotenv').config({ path: '.env.local' })
+const admin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY,
+  { auth: { autoRefreshToken: false, persistSession: false } }
+)
 const accounts = [
   {email:'kabondobenjamin1@gmail.com',password:'Admin@Kabondo123!',full_name:'Benjamin Kabondo',role:'admin'},
   {email:'testuser1@proj.com',password:'TestUser1@123',full_name:'Alice Johnson',role:'user'},
