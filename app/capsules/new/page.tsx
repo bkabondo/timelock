@@ -54,6 +54,17 @@ export default function NewCapsulePage() {
         return
       }
 
+      // Ensure user profile exists (handles new accounts not yet in timelock_users)
+      await fetch('/api/auth/create-profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: user.id,
+          email: user.email ?? '',
+          full_name: user.user_metadata?.full_name ?? user.email?.split('@')[0] ?? 'User',
+        }),
+      }).catch(() => {})
+
       const recipientList = recipients.trim()
         ? recipients.split(',').map(r => r.trim()).filter(Boolean)
         : null
