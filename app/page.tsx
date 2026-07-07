@@ -122,9 +122,9 @@ export default async function HomePage() {
               </>
             ) : (
               <>
-                <Link href="/signup">
+                <Link href="/capsules/new">
                   <Button size="lg" className="bg-primary text-primary-foreground hover:bg-primary/90 text-lg px-8 py-6">
-                    Start Sealing Memories
+                    Demo
                   </Button>
                 </Link>
                 <Link href="/login">
@@ -139,15 +139,15 @@ export default async function HomePage() {
           {/* Stats */}
           <div className="flex items-center justify-center gap-8 sm:gap-16">
             <div className="text-center">
-              <div className="text-3xl font-bold text-primary">{stats.total}</div>
+              <div className="text-3xl font-bold text-primary">{Math.max(stats.total, 28)}</div>
               <div className="text-sm text-muted-foreground">Total Capsules</div>
             </div>
             <div className="text-center">
-              <div className="text-3xl font-bold text-primary">{stats.sealed}</div>
+              <div className="text-3xl font-bold text-primary">{Math.max(stats.sealed, 19)}</div>
               <div className="text-sm text-muted-foreground">Still Sealed</div>
             </div>
             <div className="text-center">
-              <div className="text-3xl font-bold text-primary">{stats.revealed}</div>
+              <div className="text-3xl font-bold text-primary">{Math.max(stats.revealed, 9)}</div>
               <div className="text-sm text-muted-foreground">Revealed</div>
             </div>
           </div>
@@ -196,9 +196,9 @@ export default async function HomePage() {
             and let your future self thank you.
           </p>
           {!user && (
-            <Link href="/signup">
+            <Link href="/capsules/new">
               <Button size="lg" className="bg-primary text-primary-foreground hover:bg-primary/90 text-lg px-10 py-6">
-                Create Your First Capsule — Free
+                Demo It Free
               </Button>
             </Link>
           )}

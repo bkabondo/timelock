@@ -1,4 +1,4 @@
-import { notFound, redirect } from 'next/navigation'
+import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { Navbar } from '@/components/Navbar'
@@ -26,15 +26,15 @@ export default async function CapsuleDetailPage({
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
-  if (!user) redirect('/login')
-
-  const { data: profile } = await supabase
-    .from('timelock_users')
-    .select('role')
-    .eq('id', user.id)
-    .single()
-
-  const isAdmin = profile?.role === 'admin'
+  let isAdmin = false
+  if (user) {
+    const { data: profile } = await supabase
+      .from('timelock_users')
+      .select('role')
+      .eq('id', user.id)
+      .single()
+    isAdmin = profile?.role === 'admin'
+  }
 
   const { data: capsule } = await supabase
     .from('timelock_capsules')
@@ -44,7 +44,8 @@ export default async function CapsuleDetailPage({
 
   if (!capsule) notFound()
 
-  const isOwner = capsule.user_id === user.id
+  // Guests own capsules with null user_id (guest-created)
+  const isOwner = user ? capsule.user_id === user.id : capsule.user_id === null
   const now = new Date()
   const unlockDate = new Date(capsule.unlock_date)
   const isUnlocked = unlockDate <= now
@@ -57,8 +58,8 @@ export default async function CapsuleDetailPage({
 
       <main className="flex-1 max-w-3xl mx-auto w-full px-4 py-8">
         <div className="mb-6">
-          <Link href="/capsules" className="text-muted-foreground hover:text-foreground text-sm flex items-center gap-1">
-            ← Back to capsules
+          <Link href={user ? '/capsules' : '/'} className="text-muted-foreground hover:text-foreground text-sm flex items-center gap-1">
+            {user ? '← Back to capsules' : '← Back to home'}
           </Link>
         </div>
 

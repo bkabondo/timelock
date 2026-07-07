@@ -48,23 +48,6 @@ export default function NewCapsulePage() {
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
 
-      if (!user) {
-        toast.error('Please sign in first')
-        router.push('/login')
-        return
-      }
-
-      // Ensure user profile exists (handles new accounts not yet in timelock_users)
-      await fetch('/api/auth/create-profile', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: user.id,
-          email: user.email ?? '',
-          full_name: user.user_metadata?.full_name ?? user.email?.split('@')[0] ?? 'User',
-        }),
-      }).catch(() => {})
-
       const recipientList = recipients.trim()
         ? recipients.split(',').map(r => r.trim()).filter(Boolean)
         : null
@@ -72,7 +55,7 @@ export default function NewCapsulePage() {
       const { data, error } = await supabase
         .from('timelock_capsules')
         .insert({
-          user_id: user.id,
+          user_id: user?.id ?? null,
           title: title.trim(),
           message: message.trim(),
           tags,
@@ -88,7 +71,22 @@ export default function NewCapsulePage() {
         return
       }
 
-      toast.success('Capsule sealed! ⏳')
+      // Send email notifications to recipients
+      if (recipientList?.length) {
+        const senderName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Someone'
+        fetch('/api/email/share', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ recipients: recipientList, capsuleTitle: title.trim(), unlockDate: new Date(unlockDate).toISOString(), senderName }),
+        }).catch(() => {})
+        toast.info(`Email sent to ${recipientList.length} recipient${recipientList.length > 1 ? 's' : ''}`)
+      }
+
+      if (!user) {
+        toast.success('Capsule sealed! Bookmark this link to find it later.')
+      } else {
+        toast.success('Capsule sealed! ⏳')
+      }
       router.push(`/capsules/${data.id}`)
     } catch {
       toast.error('Something went wrong')

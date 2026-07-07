@@ -35,8 +35,8 @@ export async function proxy(request: NextRequest) {
 
   const { pathname } = request.nextUrl
 
-  // Protect /capsules and /admin routes
-  if ((pathname.startsWith('/capsules') || pathname.startsWith('/admin')) && !user) {
+  // Only protect /admin
+  if (pathname.startsWith('/admin') && !user) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)
