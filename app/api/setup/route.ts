@@ -45,6 +45,9 @@ export async function POST(request: Request) {
       -- reveals a capsule, so platform operators cannot read users' letters.
       -- Recreated unconditionally so existing databases pick up the change.
       DROP POLICY IF EXISTS "tl_capsules_user" ON timelock_capsules;
+      -- Leftover from an earlier migration. Postgres ORs permissive policies
+      -- together, so leaving it would widen tl_capsules_read below.
+      DROP POLICY IF EXISTS "tl_capsules_select" ON timelock_capsules;
       DROP POLICY IF EXISTS "tl_capsules_read" ON timelock_capsules;
       DROP POLICY IF EXISTS "tl_capsules_insert" ON timelock_capsules;
       DROP POLICY IF EXISTS "tl_capsules_update" ON timelock_capsules;
