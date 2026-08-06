@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { canViewCapsuleContents } from '@/lib/capsule-privacy'
 import { Navbar } from '@/components/Navbar'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -20,10 +21,13 @@ const TAG_STYLES: Record<string, { emoji: string; label: string; color: string }
 
 export default async function CapsuleDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>
+  searchParams: Promise<{ t?: string }>
 }) {
   const { id } = await params
+  const { t: guestToken } = await searchParams
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
@@ -37,17 +41,39 @@ export default async function CapsuleDetailPage({
     isAdmin = profile?.role === 'admin'
   }
 
-  const { data: capsule } = await supabase
+  // RLS lets this through only for the capsule's author or a published capsule.
+  let { data: capsule } = await supabase
     .from('timelock_capsules')
     .select('*')
     .eq('id', id)
     .single()
 
+  // Guest capsules have no owner, so RLS hides them from everyone. They open
+  // only for a caller presenting the secret token from their link, matched
+  // here before anything is rendered.
+  let hasValidGuestToken = false
+  if (!capsule && guestToken) {
+    const { data: guestCapsule } = await createAdminClient()
+      .from('timelock_capsules')
+      .select('*')
+      .eq('id', id)
+      .eq('access_token', guestToken)
+      .is('user_id', null)
+      .single()
+    if (guestCapsule) {
+      capsule = guestCapsule
+      hasValidGuestToken = true
+    }
+  }
+
   if (!capsule) notFound()
 
-  // Guests own capsules with null user_id (guest-created)
-  const isOwner = user ? capsule.user_id === user.id : capsule.user_id === null
-  const canViewContents = canViewCapsuleContents({ isOwner, isPublic: capsule.is_public })
+  const isOwner = user ? capsule.user_id === user.id : false
+  const canViewContents = canViewCapsuleContents({
+    isOwner,
+    isPublic: capsule.is_public,
+    hasValidGuestToken,
+  })
   const now = new Date()
   const unlockDate = new Date(capsule.unlock_date)
   const isUnlocked = unlockDate <= now

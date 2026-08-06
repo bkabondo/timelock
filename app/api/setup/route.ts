@@ -36,8 +36,15 @@ export async function POST(request: Request) {
         hint_text TEXT,
         ai_letter TEXT,
         tags TEXT[],
+        access_token TEXT,
         created_at TIMESTAMPTZ DEFAULT NOW()
       );
+      -- Guest (logged-out) capsules have no owner, so they cannot be protected
+      -- by identity. They carry an unguessable token instead: the only way to
+      -- read one is to hold its link. Existing databases get the column here.
+      ALTER TABLE timelock_capsules ADD COLUMN IF NOT EXISTS access_token TEXT;
+      CREATE UNIQUE INDEX IF NOT EXISTS timelock_capsules_access_token_key
+        ON timelock_capsules (access_token) WHERE access_token IS NOT NULL;
       GRANT ALL ON timelock_capsules TO anon, authenticated;
       ALTER TABLE timelock_capsules ENABLE ROW LEVEL SECURITY;
       -- Capsule contents are private. Admins deliberately get NO read access:

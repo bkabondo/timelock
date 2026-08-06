@@ -52,23 +52,51 @@ export default function NewCapsulePage() {
         ? recipients.split(',').map(r => r.trim()).filter(Boolean)
         : null
 
-      const { data, error } = await supabase
-        .from('timelock_capsules')
-        .insert({
-          user_id: user?.id ?? null,
-          title: title.trim(),
-          message: message.trim(),
-          tags,
-          unlock_date: new Date(unlockDate).toISOString(),
-          is_public: isPublic,
-          recipients: recipientList,
-        })
-        .select()
-        .single()
+      let capsuleId: string
+      let guestToken: string | null = null
 
-      if (error) {
-        toast.error(error.message)
-        return
+      if (user) {
+        const { data, error } = await supabase
+          .from('timelock_capsules')
+          .insert({
+            user_id: user.id,
+            title: title.trim(),
+            message: message.trim(),
+            tags,
+            unlock_date: new Date(unlockDate).toISOString(),
+            is_public: isPublic,
+            recipients: recipientList,
+          })
+          .select('id')
+          .single()
+
+        if (error) {
+          toast.error(error.message)
+          return
+        }
+        capsuleId = data.id
+      } else {
+        // A logged-out visitor has no identity to authorise against, so the
+        // capsule is sealed server-side and reachable only via its secret link.
+        const res = await fetch('/api/capsules/guest', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: title.trim(),
+            message: message.trim(),
+            tags,
+            unlock_date: new Date(unlockDate).toISOString(),
+            is_public: isPublic,
+            recipients: recipientList,
+          }),
+        })
+        const payload = await res.json()
+        if (!res.ok) {
+          toast.error(payload.error ?? 'Could not seal capsule')
+          return
+        }
+        capsuleId = payload.id
+        guestToken = payload.token
       }
 
       // Send email notifications to recipients
@@ -82,12 +110,13 @@ export default function NewCapsulePage() {
         toast.info(`Email sent to ${recipientList.length} recipient${recipientList.length > 1 ? 's' : ''}`)
       }
 
-      if (!user) {
-        toast.success('Capsule sealed! Bookmark this link to find it later.')
+      if (guestToken) {
+        toast.success('Capsule sealed! Save this link — it is the only way back in.')
+        router.push(`/capsules/${capsuleId}?t=${guestToken}`)
       } else {
         toast.success('Capsule sealed! ⏳')
+        router.push(`/capsules/${capsuleId}`)
       }
-      router.push(`/capsules/${data.id}`)
     } catch {
       toast.error('Something went wrong')
     } finally {
