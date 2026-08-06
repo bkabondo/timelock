@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
+import { canViewCapsuleContents } from '@/lib/capsule-privacy'
 import { Navbar } from '@/components/Navbar'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -46,6 +47,7 @@ export default async function CapsuleDetailPage({
 
   // Guests own capsules with null user_id (guest-created)
   const isOwner = user ? capsule.user_id === user.id : capsule.user_id === null
+  const canViewContents = canViewCapsuleContents({ isOwner, isPublic: capsule.is_public })
   const now = new Date()
   const unlockDate = new Date(capsule.unlock_date)
   const isUnlocked = unlockDate <= now
@@ -97,19 +99,28 @@ export default async function CapsuleDetailPage({
                 </div>
 
                 <div className="border-t border-border/40 pt-4">
-                  <div className="text-foreground leading-relaxed whitespace-pre-wrap text-lg">
-                    {capsule.message}
-                  </div>
+                  {canViewContents ? (
+                    <div className="text-foreground leading-relaxed whitespace-pre-wrap text-lg">
+                      {capsule.message}
+                    </div>
+                  ) : (
+                    <div className="text-center py-6">
+                      <div className="text-4xl mb-3">🤫</div>
+                      <p className="text-muted-foreground">
+                        This capsule is private. Only the person who wrote it can read what&apos;s inside.
+                      </p>
+                    </div>
+                  )}
                 </div>
 
-                {capsule.recipients && (capsule.recipients as string[]).length > 0 && (
+                {isOwner && capsule.recipients && (capsule.recipients as string[]).length > 0 && (
                   <div className="flex items-center gap-2 text-sm text-muted-foreground border-t border-border/40 pt-4">
                     <span>💌 Shared with:</span>
                     <span className="text-primary">{(capsule.recipients as string[]).join(', ')}</span>
                   </div>
                 )}
 
-                {capsule.ai_letter && (
+                {canViewContents && capsule.ai_letter && (
                   <div className="border-t border-border/40 pt-4">
                     <p className="text-xs text-muted-foreground uppercase tracking-widest mb-2">AI Letter</p>
                     <p className="text-foreground italic leading-relaxed">{capsule.ai_letter}</p>
@@ -170,7 +181,7 @@ export default async function CapsuleDetailPage({
                 </div>
 
                 {/* Existing hint */}
-                {(isOwner || isAdmin) && capsule.has_hint && capsule.hint_text && (
+                {isOwner && capsule.has_hint && capsule.hint_text && (
                   <div className="border-t border-border/40 pt-4">
                     <p className="text-xs text-muted-foreground uppercase tracking-widest mb-2 text-center">Oracle Hint</p>
                     <p className="text-foreground italic text-center">&ldquo;{capsule.hint_text}&rdquo;</p>

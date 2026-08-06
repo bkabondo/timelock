@@ -40,11 +40,19 @@ export async function POST(request: Request) {
       );
       GRANT ALL ON timelock_capsules TO anon, authenticated;
       ALTER TABLE timelock_capsules ENABLE ROW LEVEL SECURITY;
-      DO $$ BEGIN
-        IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'tl_capsules_user' AND tablename = 'timelock_capsules') THEN
-          CREATE POLICY "tl_capsules_user" ON timelock_capsules FOR ALL USING (user_id=auth.uid() OR is_public=true OR (SELECT role FROM timelock_users WHERE id=auth.uid())='admin');
-        END IF;
-      END $$;
+      -- Capsule contents are private. Admins deliberately get NO read access:
+      -- ownership (or the author marking it public) is the only thing that
+      -- reveals a capsule, so platform operators cannot read users' letters.
+      -- Recreated unconditionally so existing databases pick up the change.
+      DROP POLICY IF EXISTS "tl_capsules_user" ON timelock_capsules;
+      DROP POLICY IF EXISTS "tl_capsules_read" ON timelock_capsules;
+      DROP POLICY IF EXISTS "tl_capsules_insert" ON timelock_capsules;
+      DROP POLICY IF EXISTS "tl_capsules_update" ON timelock_capsules;
+      DROP POLICY IF EXISTS "tl_capsules_delete" ON timelock_capsules;
+      CREATE POLICY "tl_capsules_read" ON timelock_capsules FOR SELECT USING (user_id=auth.uid() OR is_public=true);
+      CREATE POLICY "tl_capsules_insert" ON timelock_capsules FOR INSERT WITH CHECK (user_id=auth.uid());
+      CREATE POLICY "tl_capsules_update" ON timelock_capsules FOR UPDATE USING (user_id=auth.uid()) WITH CHECK (user_id=auth.uid());
+      CREATE POLICY "tl_capsules_delete" ON timelock_capsules FOR DELETE USING (user_id=auth.uid());
     `)
     return NextResponse.json({ status: 'Migration complete' })
   } catch (e: unknown) {

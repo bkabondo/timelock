@@ -1,5 +1,4 @@
 import { redirect } from 'next/navigation'
-import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { Navbar } from '@/components/Navbar'
@@ -28,6 +27,11 @@ export default async function AdminPage() {
   const now = new Date().toISOString()
 
   // Get all stats
+  // This dashboard reads metadata only. `title`, `message`, `hint_text` and
+  // `ai_letter` are never selected here — an operator can see that a capsule
+  // exists and whether it has opened, but not a word of what it says. This
+  // client uses the service role, which bypasses RLS, so the column list is
+  // the only thing keeping contents out; do not widen it to `*`.
   const [
     { count: totalCapsules },
     { count: sealedCount },
@@ -35,19 +39,30 @@ export default async function AdminPage() {
     { count: totalUsers },
     { data: recentCapsules },
     { data: allUsers },
+    { data: capsuleIndex },
   ] = await Promise.all([
-    adminClient.from('timelock_capsules').select('*', { count: 'exact', head: true }),
-    adminClient.from('timelock_capsules').select('*', { count: 'exact', head: true }).gt('unlock_date', now),
-    adminClient.from('timelock_capsules').select('*', { count: 'exact', head: true }).eq('is_public', true),
-    adminClient.from('timelock_users').select('*', { count: 'exact', head: true }),
+    adminClient.from('timelock_capsules').select('id', { count: 'exact', head: true }),
+    adminClient.from('timelock_capsules').select('id', { count: 'exact', head: true }).gt('unlock_date', now),
+    adminClient.from('timelock_capsules').select('id', { count: 'exact', head: true }).eq('is_public', true),
+    adminClient.from('timelock_users').select('id', { count: 'exact', head: true }),
     adminClient.from('timelock_capsules')
-      .select('*, timelock_users!timelock_capsules_user_id_fkey(email, full_name)')
+      .select('id, unlock_date, is_public, created_at, timelock_users!timelock_capsules_user_id_fkey(email, full_name)')
       .order('created_at', { ascending: false })
       .limit(10),
     adminClient.from('timelock_users')
-      .select('*')
+      .select('id, email, full_name, role, created_at')
       .order('created_at', { ascending: false }),
+    adminClient.from('timelock_capsules').select('user_id, unlock_date'),
   ])
+
+  // Per-author tallies, so you can see activity without seeing content.
+  const perUser = new Map<string, { sealed: number; revealed: number }>()
+  for (const c of capsuleIndex ?? []) {
+    const tally = perUser.get(c.user_id) ?? { sealed: 0, revealed: 0 }
+    if (c.unlock_date > now) tally.sealed++
+    else tally.revealed++
+    perUser.set(c.user_id, tally)
+  }
 
   const revealedCount = (totalCapsules ?? 0) - (sealedCount ?? 0)
   const revealedPct = totalCapsules ? Math.round((revealedCount / totalCapsules) * 100) : 0
@@ -126,11 +141,13 @@ export default async function AdminPage() {
                     return (
                       <div key={capsule.id} className="flex items-center justify-between py-2 border-b border-border/40 last:border-0">
                         <div className="flex-1 min-w-0">
-                          <Link href={`/capsules/${capsule.id}`} className="font-medium text-sm hover:text-primary truncate block">
-                            {capsule.title}
-                          </Link>
-                          <p className="text-xs text-muted-foreground truncate">
+                          <p className="font-medium text-sm truncate">
                             {creator?.full_name ?? creator?.email ?? 'Unknown'}
+                          </p>
+                          <p className="text-xs text-muted-foreground truncate">
+                            {isRevealed
+                              ? `Opened ${new Date(capsule.unlock_date).toLocaleDateString()}`
+                              : `Opens ${new Date(capsule.unlock_date).toLocaleDateString()}`}
                           </p>
                         </div>
                         <div className="flex items-center gap-2 ml-2">
@@ -166,11 +183,16 @@ export default async function AdminPage() {
             <CardContent>
               {allUsers && allUsers.length > 0 ? (
                 <div className="space-y-3">
-                  {allUsers.map((u) => (
+                  {allUsers.map((u) => {
+                    const tally = perUser.get(u.id) ?? { sealed: 0, revealed: 0 }
+                    return (
                     <div key={u.id} className="flex items-center justify-between py-2 border-b border-border/40 last:border-0">
                       <div className="flex-1 min-w-0">
                         <p className="font-medium text-sm truncate">{u.full_name ?? 'No name'}</p>
                         <p className="text-xs text-muted-foreground truncate">{u.email}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          🔒 {tally.sealed} sealed · ✨ {tally.revealed} opened
+                        </p>
                       </div>
                       <div className="flex items-center gap-2 ml-2">
                         <Badge
@@ -187,7 +209,8 @@ export default async function AdminPage() {
                         </p>
                       </div>
                     </div>
-                  ))}
+                    )
+                  })}
                 </div>
               ) : (
                 <p className="text-muted-foreground text-sm">No users yet</p>
@@ -200,6 +223,9 @@ export default async function AdminPage() {
 
         <div className="text-center text-sm text-muted-foreground">
           <p>TimeLock Admin Panel — All data is real-time</p>
+          <p className="mt-1">
+            Capsule contents are private. Admins can see activity, never what anyone wrote.
+          </p>
         </div>
       </main>
     </div>
