@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { rateLimit, clientIp } from '@/lib/rate-limit'
 
 // Creates a capsule for a logged-out visitor. Guests have no identity, so the
 // row is written server-side with a secret access_token; whoever holds the
@@ -8,6 +9,15 @@ import { createAdminClient } from '@/lib/supabase/admin'
 // anonymous writes.
 export async function POST(request: NextRequest) {
   try {
+    // Unauthenticated write backed by the service role — throttle it.
+    const limit = rateLimit(`guest:${clientIp(request)}`, 5)
+    if (!limit.ok) {
+      return NextResponse.json(
+        { error: 'Too many capsules. Try again in a minute.' },
+        { status: 429, headers: { 'Retry-After': String(limit.retryAfter) } }
+      )
+    }
+
     const { title, message, tags, unlock_date, is_public, recipients } = await request.json()
 
     if (typeof title !== 'string' || typeof message !== 'string' || !title.trim() || !message.trim()) {

@@ -1,17 +1,29 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 
-const USERS = [
-  { email: 'kabondobenjamin1@gmail.com', password: 'Admin@Kabondo123!', full_name: 'Benjamin Kabondo', role: 'admin' as const },
-  { email: 'testuser1@proj.com', password: 'TestUser1@123', full_name: 'Test User One', role: 'user' as const },
-  { email: 'testuser2@proj.com', password: 'TestUser2@123', full_name: 'Test User Two', role: 'user' as const },
-  { email: 'testuser3@proj.com', password: 'TestUser3@123', full_name: 'Test User Three', role: 'user' as const },
-]
+// Seed credentials come from the environment and are never committed. This
+// endpoint can mint an ADMIN account, so a password in source here is a full
+// takeover of the deployed app for anyone who can read the repo.
+const USERS = process.env.SEED_ADMIN_EMAIL && process.env.SEED_ADMIN_PASSWORD
+  ? [{
+      email: process.env.SEED_ADMIN_EMAIL,
+      password: process.env.SEED_ADMIN_PASSWORD,
+      full_name: process.env.SEED_ADMIN_NAME ?? 'Admin',
+      role: 'admin' as const,
+    }]
+  : null
 
 export async function POST(request: Request) {
   const { searchParams } = new URL(request.url)
   if (searchParams.get('token') !== process.env.SETUP_TOKEN) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  if (!USERS) {
+    return NextResponse.json(
+      { error: 'Seeding is disabled: set SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD' },
+      { status: 400 }
+    )
   }
 
   const adminClient = createAdminClient()

@@ -31,6 +31,9 @@ export default function SignupPage() {
         password,
         options: {
           data: { full_name: fullName },
+          // Without this, Supabase falls back to the project Site URL, which
+          // belongs to a different app entirely.
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
         },
       })
       if (error) {

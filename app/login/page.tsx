@@ -47,9 +47,16 @@ export default function LoginPage() {
     }
   }
 
-  function handleGoogle() {
-    const returnTo = encodeURIComponent(window.location.origin)
-    window.location.href = `https://prestige-limo-bk.vercel.app/auth/start?return_to=${returnTo}`
+  async function handleGoogle() {
+    // Sign in against this app's own origin. This used to bounce through
+    // prestige-limo's /auth/start broker, which handed tokens back to
+    // /auth/set-session as query params — a route this app doesn't have.
+    const supabase = createClient()
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: `${window.location.origin}/auth/callback` },
+    })
+    if (error) toast.error(error.message)
   }
 
   return (
