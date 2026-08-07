@@ -39,8 +39,12 @@ export function LetterReveal({
 
   useEffect(() => {
     if (!isEncrypted) return
+    // The URL fragment only exists in the browser (it is never sent to the
+    // server), so it can only be read post-mount — this is the one render
+    // pass where a synchronous setState is unavoidable.
     const match = window.location.hash.match(/key=([A-Za-z0-9_-]+)/)
     if (match) void tryKey(match[1])
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setCheckedFragment(true)
   }, [isEncrypted, tryKey])
 
