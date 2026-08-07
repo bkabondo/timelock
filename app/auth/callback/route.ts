@@ -5,7 +5,10 @@ export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url)
   const code = searchParams.get('code')
   const type = searchParams.get('type')
-  const next = searchParams.get('next') ?? '/capsules'
+  // Same-site paths only. "//evil.com" is protocol-relative and would send
+  // the user off-site once appended to origin.
+  const requestedNext = searchParams.get('next') ?? '/capsules'
+  const next = /^\/(?!\/)/.test(requestedNext) ? requestedNext : '/capsules'
 
   if (code) {
     const supabase = await createClient()

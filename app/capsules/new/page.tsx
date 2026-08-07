@@ -142,6 +142,12 @@ export default function NewCapsulePage() {
         toast.info(`Email sent to ${recipientList.length} recipient${recipientList.length > 1 ? 's' : ''}`)
       }
 
+      // The decryption key rides in the fragment, which is never sent to the
+      // server. The guest token stays a query param because the server needs
+      // it to find an ownerless capsule at all — and it is only a pointer:
+      // holding it yields metadata and ciphertext, never the letter, which
+      // needs the fragment key. Referrer-Policy: no-referrer keeps it from
+      // leaking onward.
       const url = `${window.location.origin}/capsules/${capsuleId}${guestToken ? `?t=${guestToken}` : ''}#key=${key}`
       setSealed({ url, key, title: title.trim(), unlockDate })
       toast.success('Capsule sealed! ⏳')
