@@ -7,7 +7,7 @@ import { Navbar } from '@/components/Navbar'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Countdown } from '@/components/Countdown'
-import { HintButton } from './HintButton'
+import { LetterReveal } from './LetterReveal'
 import { DeleteButton } from './DeleteButton'
 
 const TAG_STYLES: Record<string, { emoji: string; label: string; color: string }> = {
@@ -18,6 +18,10 @@ const TAG_STYLES: Record<string, { emoji: string; label: string; color: string }
   other: { emoji: '📦', label: 'Other', color: 'text-gray-400' },
   default: { emoji: '⏳', label: 'Capsule', color: 'text-primary' },
 }
+
+// Metadata only — the letter lives in timelock_capsule_contents and is
+// fetched separately, so a sealed capsule's response never contains it.
+const CAPSULE_META = 'id, user_id, title, unlock_date, is_public, recipients, tags, created_at'
 
 export default async function CapsuleDetailPage({
   params,
@@ -44,7 +48,7 @@ export default async function CapsuleDetailPage({
   // RLS lets this through only for the capsule's author or a published capsule.
   let { data: capsule } = await supabase
     .from('timelock_capsules')
-    .select('*')
+    .select(CAPSULE_META)
     .eq('id', id)
     .single()
 
@@ -52,10 +56,12 @@ export default async function CapsuleDetailPage({
   // only for a caller presenting the secret token from their link, matched
   // here before anything is rendered.
   let hasValidGuestToken = false
+  let adminClient: ReturnType<typeof createAdminClient> | null = null
   if (!capsule && guestToken) {
-    const { data: guestCapsule } = await createAdminClient()
+    adminClient = createAdminClient()
+    const { data: guestCapsule } = await adminClient
       .from('timelock_capsules')
-      .select('*')
+      .select(CAPSULE_META)
       .eq('id', id)
       .eq('access_token', guestToken)
       .is('user_id', null)
@@ -79,6 +85,28 @@ export default async function CapsuleDetailPage({
   const isUnlocked = unlockDate <= now
   const firstTag = (capsule.tags as string[] | null)?.[0] ?? 'default'
   const tagStyle = TAG_STYLES[firstTag] ?? TAG_STYLES.default
+
+  // Hints are teasers, not secrets — RLS shows them to whoever can see the
+  // metadata. Guest capsules read them through the token-authorised client.
+  const { data: hintRows } = await (hasValidGuestToken ? adminClient! : supabase)
+    .from('timelock_capsule_hints')
+    .select('position, text')
+    .eq('capsule_id', id)
+    .order('position')
+  const hints = hintRows ?? []
+
+  // The letter (ciphertext) is fetched only once unlocked AND authorised.
+  // For logged-in/public viewers RLS re-checks both conditions against the
+  // database clock, so this query — not the if — is the real gate.
+  let letter: { body: string; iv: string | null; is_encrypted: boolean } | null = null
+  if (isUnlocked && canViewContents) {
+    const { data } = await (hasValidGuestToken ? adminClient! : supabase)
+      .from('timelock_capsule_contents')
+      .select('body, iv, is_encrypted')
+      .eq('capsule_id', id)
+      .single()
+    letter = data
+  }
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -126,9 +154,13 @@ export default async function CapsuleDetailPage({
 
                 <div className="border-t border-border/40 pt-4">
                   {canViewContents ? (
-                    <div className="text-foreground leading-relaxed whitespace-pre-wrap text-lg">
-                      {capsule.message}
-                    </div>
+                    letter ? (
+                      <LetterReveal body={letter.body} iv={letter.iv} isEncrypted={letter.is_encrypted} />
+                    ) : (
+                      <p className="text-muted-foreground text-center py-6">
+                        The letter isn&apos;t available yet — if this capsule just unlocked, refresh in a moment.
+                      </p>
+                    )
                   ) : (
                     <div className="text-center py-6">
                       <div className="text-4xl mb-3">🤫</div>
@@ -143,13 +175,6 @@ export default async function CapsuleDetailPage({
                   <div className="flex items-center gap-2 text-sm text-muted-foreground border-t border-border/40 pt-4">
                     <span>💌 Shared with:</span>
                     <span className="text-primary">{(capsule.recipients as string[]).join(', ')}</span>
-                  </div>
-                )}
-
-                {canViewContents && capsule.ai_letter && (
-                  <div className="border-t border-border/40 pt-4">
-                    <p className="text-xs text-muted-foreground uppercase tracking-widest mb-2">AI Letter</p>
-                    <p className="text-foreground italic leading-relaxed">{capsule.ai_letter}</p>
                   </div>
                 )}
               </CardContent>
@@ -206,25 +231,20 @@ export default async function CapsuleDetailPage({
                   <Countdown unlockDate={capsule.unlock_date} />
                 </div>
 
-                {/* Existing hint */}
-                {isOwner && capsule.has_hint && capsule.hint_text && (
-                  <div className="border-t border-border/40 pt-4">
-                    <p className="text-xs text-muted-foreground uppercase tracking-widest mb-2 text-center">Oracle Hint</p>
-                    <p className="text-foreground italic text-center">&ldquo;{capsule.hint_text}&rdquo;</p>
-                  </div>
-                )}
-
-                {/* AI Hint Button */}
-                {isOwner && (
-                  <div className="border-t border-border/40 pt-4">
-                    <p className="text-sm text-muted-foreground mb-3 text-center">
-                      Curious? Get an oracle hint about what&apos;s inside...
+                {/* Hints from the author */}
+                {hints.length > 0 && (
+                  <div className="border-t border-border/40 pt-4 space-y-3">
+                    <p className="text-xs text-muted-foreground uppercase tracking-widest text-center">
+                      Whispers from inside
                     </p>
-                    <HintButton
-                      capsuleId={capsule.id}
-                      title={capsule.title}
-                      tags={(capsule.tags as string[] | null) ?? []}
-                    />
+                    {hints.map((hint) => (
+                      <div key={hint.position} className="bg-background/30 border border-border rounded-lg p-3 text-center">
+                        <p className="text-xs text-muted-foreground mb-1">
+                          Hint {hint.position} of {hints.length}
+                        </p>
+                        <p className="text-foreground italic">&ldquo;{hint.text}&rdquo;</p>
+                      </div>
+                    ))}
                   </div>
                 )}
               </CardContent>
