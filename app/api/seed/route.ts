@@ -4,14 +4,17 @@ import { createAdminClient } from '@/lib/supabase/admin'
 // Seed credentials come from the environment and are never committed. This
 // endpoint can mint an ADMIN account, so a password in source here is a full
 // takeover of the deployed app for anyone who can read the repo.
-const USERS = process.env.SEED_ADMIN_EMAIL && process.env.SEED_ADMIN_PASSWORD
-  ? [{
-      email: process.env.SEED_ADMIN_EMAIL,
-      password: process.env.SEED_ADMIN_PASSWORD,
-      full_name: process.env.SEED_ADMIN_NAME ?? 'Admin',
-      role: 'admin' as const,
-    }]
-  : null
+//
+// Set SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD to use it; without them the
+// route refuses to run rather than falling back to a default.
+function seedUsers() {
+  const email = process.env.SEED_ADMIN_EMAIL
+  const password = process.env.SEED_ADMIN_PASSWORD
+  if (!email || !password) return null
+  return [
+    { email, password, full_name: process.env.SEED_ADMIN_NAME ?? 'Admin', role: 'admin' as const },
+  ]
+}
 
 export async function POST(request: Request) {
   const { searchParams } = new URL(request.url)
@@ -19,6 +22,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  const USERS = seedUsers()
   if (!USERS) {
     return NextResponse.json(
       { error: 'Seeding is disabled: set SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD' },
