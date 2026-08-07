@@ -10,6 +10,7 @@ import { Countdown } from '@/components/Countdown'
 type Capsule = {
   id: string
   title: string
+  message: string
   tags: string[] | null
   unlock_date: string
   is_public: boolean
@@ -43,10 +44,9 @@ export default async function CapsulesPage() {
   const isAdmin = profile?.role === 'admin'
   const now = new Date().toISOString()
 
-  // Metadata only — letters live in timelock_capsule_contents, encrypted.
   const { data: capsules } = await supabase
     .from('timelock_capsules')
-    .select('id, title, tags, unlock_date, is_public, created_at')
+    .select('*')
     .eq('user_id', user.id)
     .order('created_at', { ascending: false })
 
@@ -130,8 +130,8 @@ export default async function CapsulesPage() {
                       <CardTitle className="text-base mt-2">{capsule.title}</CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <p className="text-sm text-muted-foreground">
-                        🗝️ Open with your reveal link to read the letter
+                      <p className="text-sm text-muted-foreground line-clamp-2">
+                        {capsule.message}
                       </p>
                       <p className="text-xs text-muted-foreground mt-2">
                         Unlocked {new Date(capsule.unlock_date).toLocaleDateString()}
