@@ -54,10 +54,14 @@ describe('Capsule Utilities', () => {
     })
 
     it('returns time object for future date', () => {
-      const futureDate = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString()
+      // Deliberately not a whole number of days. `days` floors, so an exact
+      // 2-day offset lands on the boundary and yields 2 or 1 depending on
+      // whether a millisecond elapses between building the date and reading
+      // the clock inside getTimeLeft. The extra hour keeps it off the edge.
+      const futureDate = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000 + 60 * 60 * 1000).toISOString()
       const result = getTimeLeft(futureDate)
       expect(result).not.toBeNull()
-      expect(result?.days).toBe(1)
+      expect(result?.days).toBe(2)
       expect(result?.hours).toBeGreaterThanOrEqual(0)
       expect(result?.minutes).toBeGreaterThanOrEqual(0)
       expect(result?.seconds).toBeGreaterThanOrEqual(0)

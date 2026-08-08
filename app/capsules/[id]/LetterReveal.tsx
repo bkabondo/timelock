@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { decryptLetter } from '@/lib/capsule-crypto'
+import { readCurrentFragment } from '@/lib/capsule-fragment'
 
 /**
  * Decrypts and renders an unlocked letter entirely in the browser.
@@ -41,9 +42,10 @@ export function LetterReveal({
     if (!isEncrypted) return
     // The URL fragment only exists in the browser (it is never sent to the
     // server), so it can only be read post-mount — this is the one render
-    // pass where a synchronous setState is unavoidable.
-    const match = window.location.hash.match(/key=([A-Za-z0-9_-]+)/)
-    if (match) void tryKey(match[1])
+    // pass where a synchronous setState is unavoidable. Parsed as real
+    // key/value pairs because the fragment now carries the access token too.
+    const { key } = readCurrentFragment()
+    if (key) void tryKey(key)
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setCheckedFragment(true)
   }, [isEncrypted, tryKey])

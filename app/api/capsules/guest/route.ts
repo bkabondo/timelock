@@ -92,14 +92,11 @@ export async function POST(request: NextRequest) {
       if (hintError) console.error('Guest capsule hint error:', safeError(hintError))
     }
 
-    // `path` is the guest's only route back to this capsule — there is no
-    // account to look it up from. The caller appends the decryption key as a
-    // fragment; that half never reaches us and cannot be reconstructed here.
-    return NextResponse.json({
-      id: data.id,
-      token,
-      path: `/capsules/${data.id}?t=${encodeURIComponent(token)}`,
-    })
+    // Just the pieces. The caller assembles the recovery link as
+    // /capsules/<id>#t=<token>&key=<key>, entirely in the fragment: the key is
+    // never ours to see, and the token must not be in a path or query string
+    // that an access log would capture.
+    return NextResponse.json({ id: data.id, token })
   } catch (err) {
     // Deliberately not logging `err`: this catch also covers request.json(),
     // and the thrown value can quote the request body back at us.

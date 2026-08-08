@@ -67,7 +67,6 @@ export default function NewCapsulePage() {
 
       let capsuleId: string
       let guestToken: string | null = null
-      let guestPath: string | null = null
 
       if (user) {
         const { data, error } = await supabase
@@ -130,7 +129,6 @@ export default function NewCapsulePage() {
         }
         capsuleId = payload.id
         guestToken = payload.token
-        guestPath = payload.path ?? null
       }
 
       // Send email notifications to recipients
@@ -144,14 +142,13 @@ export default function NewCapsulePage() {
         toast.info(`Email sent to ${recipientList.length} recipient${recipientList.length > 1 ? 's' : ''}`)
       }
 
-      // The decryption key rides in the fragment, which is never sent to the
-      // server. The guest token stays a query param because the page is
-      // server-rendered and the policy needs it on that first request — and it
-      // is only half the secret: holding it yields metadata and ciphertext,
-      // never the letter, which needs the fragment key. Referrer-Policy:
-      // no-referrer keeps both from leaking onward.
-      const path = guestPath ?? `/capsules/${capsuleId}`
-      const url = `${window.location.origin}${path}#key=${key}`
+      // Both secrets ride in the fragment, which browsers strip before sending:
+      // the access token that authorises the read, and the key that decrypts
+      // the letter. Neither reaches the server, so neither can land in an
+      // access log — the token used to be ?t=, and query strings are logged.
+      // Referrer-Policy: no-referrer keeps them from leaking onward too.
+      const fragment = guestToken ? `#t=${guestToken}&key=${key}` : `#key=${key}`
+      const url = `${window.location.origin}/capsules/${capsuleId}${fragment}`
       setSealed({ url, key, title: title.trim(), unlockDate, isGuest: guestToken !== null })
       toast.success('Capsule sealed! ⏳')
     } catch {
@@ -189,6 +186,10 @@ export default function NewCapsulePage() {
             'This capsule was sealed without an account, so the reveal link is',
             'also the only way to find it again. It is not listed anywhere and',
             'cannot be recovered from an email address.',
+            '',
+            'Save the link exactly as it appears above, including everything',
+            'after the # — that part is both the key and the proof the capsule',
+            'is yours, and a link truncated at the # will not open it.',
           ]
         : []),
     ].join('\n')
@@ -245,8 +246,10 @@ export default function NewCapsulePage() {
                   <Button type="button" onClick={copyRevealLink}>Copy</Button>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  The part after # never reaches our servers. Anyone you give this link to can read the letter
-                  once it unlocks, so share it only with people you mean to.
+                  Everything after the <code>#</code> stays in your browser and never reaches our servers
+                  {sealed.isGuest ? ' — it is both the key and the proof this capsule is yours, so copy the link whole' : ''}.
+                  Anyone you give this link to can read the letter once it unlocks, so share it only with people
+                  you mean to.
                 </p>
               </div>
 
