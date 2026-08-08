@@ -9,12 +9,15 @@
  *   3. It is a guest capsule and you hold its secret link.
  *
  * Guest capsules are written by logged-out visitors, so there is no identity to
- * check; an unguessable `access_token` in the URL stands in for one. The token
- * is matched server-side before the row is ever fetched.
+ * check; an unguessable `access_token` stands in for one. It is a bearer
+ * credential — holding the link IS the authorisation — and it is checked by
+ * Postgres, not here: the token travels as the `x-capsule-token` header and
+ * `tl_capsules_read` compares it against the stored column.
  *
- * Being a platform admin is deliberately NOT a way in. The matching RLS policy
- * (tl_capsules_read) enforces rules 1 and 2 in the database, so an operator
- * cannot read users' letters through the app or through a query.
+ * So this function mirrors the policy, it does not enforce it. All three rules
+ * are enforced in the database, which is also why being a platform admin is
+ * deliberately NOT a way in: an operator cannot read users' letters through the
+ * app or through a query.
  */
 export function canViewCapsuleContents(opts: {
   isOwner: boolean

@@ -32,7 +32,7 @@ export default function NewCapsulePage() {
   const [recipients, setRecipients] = useState('')
   const [hints, setHints] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
-  const [sealed, setSealed] = useState<{ url: string; key: string; title: string; unlockDate: string } | null>(null)
+  const [sealed, setSealed] = useState<{ url: string; key: string; title: string; unlockDate: string; isGuest: boolean } | null>(null)
 
   // Min date: tomorrow
   const tomorrow = new Date()
@@ -67,6 +67,7 @@ export default function NewCapsulePage() {
 
       let capsuleId: string
       let guestToken: string | null = null
+      let guestPath: string | null = null
 
       if (user) {
         const { data, error } = await supabase
@@ -129,6 +130,7 @@ export default function NewCapsulePage() {
         }
         capsuleId = payload.id
         guestToken = payload.token
+        guestPath = payload.path ?? null
       }
 
       // Send email notifications to recipients
@@ -143,13 +145,14 @@ export default function NewCapsulePage() {
       }
 
       // The decryption key rides in the fragment, which is never sent to the
-      // server. The guest token stays a query param because the server needs
-      // it to find an ownerless capsule at all — and it is only a pointer:
-      // holding it yields metadata and ciphertext, never the letter, which
-      // needs the fragment key. Referrer-Policy: no-referrer keeps it from
-      // leaking onward.
-      const url = `${window.location.origin}/capsules/${capsuleId}${guestToken ? `?t=${guestToken}` : ''}#key=${key}`
-      setSealed({ url, key, title: title.trim(), unlockDate })
+      // server. The guest token stays a query param because the page is
+      // server-rendered and the policy needs it on that first request — and it
+      // is only half the secret: holding it yields metadata and ciphertext,
+      // never the letter, which needs the fragment key. Referrer-Policy:
+      // no-referrer keeps both from leaking onward.
+      const path = guestPath ?? `/capsules/${capsuleId}`
+      const url = `${window.location.origin}${path}#key=${key}`
+      setSealed({ url, key, title: title.trim(), unlockDate, isGuest: guestToken !== null })
       toast.success('Capsule sealed! ⏳')
     } catch {
       toast.error('Something went wrong')
@@ -180,6 +183,14 @@ export default function NewCapsulePage() {
       'Keep this file safe. The letter is encrypted in your browser and',
       'TimeLock never sees the key — if it is lost, the letter is gone',
       'forever. No one can recover it for you.',
+      ...(sealed.isGuest
+        ? [
+            '',
+            'This capsule was sealed without an account, so the reveal link is',
+            'also the only way to find it again. It is not listed anywhere and',
+            'cannot be recovered from an email address.',
+          ]
+        : []),
     ].join('\n')
     const a = document.createElement('a')
     a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain' }))
@@ -213,15 +224,29 @@ export default function NewCapsulePage() {
                 </p>
               </div>
 
+              {sealed.isGuest && (
+                <div className="p-4 rounded-lg bg-amber-500/10 border border-amber-500/40 space-y-2">
+                  <p className="text-sm text-amber-200 font-medium">
+                    🔑 You sealed this without an account — this link is your only way back
+                  </p>
+                  <p className="text-xs text-amber-200/80">
+                    The capsule is not attached to any account, so it will not appear in a
+                    &ldquo;my capsules&rdquo; list and cannot be found by searching or by email. Nobody can
+                    look it up for you, and support cannot restore it. Copy the link below or download the
+                    backup file now.
+                  </p>
+                </div>
+              )}
+
               <div className="space-y-2">
-                <Label>Reveal link (contains your key)</Label>
+                <Label>{sealed.isGuest ? 'Your recovery link (contains your key)' : 'Reveal link (contains your key)'}</Label>
                 <div className="flex gap-2">
                   <Input readOnly value={sealed.url} className="bg-background/50 font-mono text-xs" onFocus={e => e.currentTarget.select()} />
                   <Button type="button" onClick={copyRevealLink}>Copy</Button>
                 </div>
                 <p className="text-xs text-muted-foreground">
                   The part after # never reaches our servers. Anyone you give this link to can read the letter
-                  once it unlocks{sealed.url.includes('?t=') ? ' — for guest capsules it is also the only way back to the page' : ''}.
+                  once it unlocks, so share it only with people you mean to.
                 </p>
               </div>
 

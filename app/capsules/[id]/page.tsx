@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
-import { createAdminClient } from '@/lib/supabase/admin'
+import { createTokenClient } from '@/lib/supabase/token-client'
 import { canViewCapsuleContents } from '@/lib/capsule-privacy'
 import { Navbar } from '@/components/Navbar'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -52,19 +52,19 @@ export default async function CapsuleDetailPage({
     .eq('id', id)
     .single()
 
-  // Guest capsules have no owner, so RLS hides them from everyone. They open
-  // only for a caller presenting the secret token from their link, matched
-  // here before anything is rendered.
+  // Guest capsules have no owner, so the owner/public branches of RLS never
+  // match and the query above returns nothing. They open only for a caller
+  // presenting the token from their link, which travels as the x-capsule-token
+  // header and is compared inside the policy — this client holds the anon key,
+  // not the service role, so a wrong or absent token simply returns no row.
   let hasValidGuestToken = false
-  let adminClient: ReturnType<typeof createAdminClient> | null = null
+  let tokenClient: ReturnType<typeof createTokenClient> | null = null
   if (!capsule && guestToken) {
-    adminClient = createAdminClient()
-    const { data: guestCapsule } = await adminClient
+    tokenClient = createTokenClient(guestToken)
+    const { data: guestCapsule } = await tokenClient
       .from('timelock_capsules')
       .select(CAPSULE_META)
       .eq('id', id)
-      .eq('access_token', guestToken)
-      .is('user_id', null)
       .single()
     if (guestCapsule) {
       capsule = guestCapsule
@@ -88,7 +88,7 @@ export default async function CapsuleDetailPage({
 
   // Hints are teasers, not secrets — RLS shows them to whoever can see the
   // metadata. Guest capsules read them through the token-authorised client.
-  const { data: hintRows } = await (hasValidGuestToken ? adminClient! : supabase)
+  const { data: hintRows } = await (hasValidGuestToken ? tokenClient! : supabase)
     .from('timelock_capsule_hints')
     .select('position, text')
     .eq('capsule_id', id)
@@ -96,11 +96,12 @@ export default async function CapsuleDetailPage({
   const hints = hintRows ?? []
 
   // The letter (ciphertext) is fetched only once unlocked AND authorised.
-  // For logged-in/public viewers RLS re-checks both conditions against the
-  // database clock, so this query — not the if — is the real gate.
+  // RLS re-checks both conditions against the database clock for every caller —
+  // token holders included, since the token authorises but does not skip the
+  // clock — so this query, not the if, is the real gate.
   let letter: { body: string; iv: string | null; is_encrypted: boolean } | null = null
   if (isUnlocked && canViewContents) {
-    const { data } = await (hasValidGuestToken ? adminClient! : supabase)
+    const { data } = await (hasValidGuestToken ? tokenClient! : supabase)
       .from('timelock_capsule_contents')
       .select('body, iv, is_encrypted')
       .eq('capsule_id', id)
