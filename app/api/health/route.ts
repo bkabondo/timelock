@@ -31,8 +31,15 @@ export async function GET() {
   try {
     const { rows } = await pool.query('SELECT 1 AS ok')
     return NextResponse.json({ db: rows[0]?.ok === 1 ? 'ok' : 'unexpected' })
-  } catch {
-    return NextResponse.json({ db: 'unreachable' }, { status: 503 })
+  } catch (err: unknown) {
+    // Codes only — never err.message, which quotes host and user. A SQLSTATE
+    // like 28P01 means the credential is wrong; a syscall errno like
+    // ENETUNREACH or ETIMEDOUT means we never reached the server at all.
+    const e = err as { code?: string; errno?: number; syscall?: string; name?: string }
+    return NextResponse.json(
+      { db: 'unreachable', code: e.code ?? null, syscall: e.syscall ?? null, name: e.name ?? null },
+      { status: 503 }
+    )
   } finally {
     await pool.end().catch(() => {})
   }
