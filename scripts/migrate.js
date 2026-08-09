@@ -1,5 +1,33 @@
 const { Pool } = require('pg')
-const pool = new Pool({ connectionString: 'postgresql://postgres:Kabondo%400788531388@db.ykezmltclnblpgpopezo.supabase.co:5432/postgres?sslmode=require' })
+
+// Connects as the `postgres` superuser, which is not subject to RLS. Read it
+// from the environment — never inline it. This file held a literal connection
+// string from 2026-06-01 (390c9f7) until 2026-08-08 in a public repository;
+// that password has since been rotated.
+//
+// Set DATABASE_URL before running, e.g.
+//   DATABASE_URL='postgresql://postgres:<password>@db.<project>.supabase.co:5432/postgres?sslmode=require' \
+//     node scripts/migrate.js
+//
+// !! OBSOLETE — DO NOT RUN AGAINST THE CURRENT DATABASE !!
+// The SQL below describes the June 2026 schema. It is wrong in two ways that
+// matter now:
+//   1. It creates timelock_capsules with creator_id/content/theme. The live
+//      schema uses user_id and keeps the letter in timelock_capsule_contents,
+//      so the CREATE POLICY statements reference columns that no longer exist
+//      and will error out partway through.
+//   2. Its tl_capsules_select policy grants read access to role='admin'.
+//      Capsule contents are deliberately private from admins; that path was
+//      removed on purpose and must not come back.
+// Kept only as a record of the original schema. The authoritative migrations
+// are in scripts/migrations/.
+const pool = new Pool({ connectionString: process.env.DATABASE_URL })
+
+if (!process.env.DATABASE_URL) {
+  console.error('DATABASE_URL is not set. Refusing to run.')
+  process.exit(1)
+}
+
 async function run() {
   const client = await pool.connect()
   try {
