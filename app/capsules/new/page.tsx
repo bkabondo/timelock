@@ -4,6 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { generateCapsuleKey, encryptLetter } from '@/lib/capsule-crypto'
+import { humanizeDbError } from '@/lib/db-errors'
 import { Navbar } from '@/components/Navbar'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -69,6 +70,23 @@ export default function NewCapsulePage() {
       let guestToken: string | null = null
 
       if (user) {
+        // timelock_capsules.user_id has a foreign key to timelock_users, but
+        // auth.users is shared across all ten apps in this Supabase project and
+        // nothing creates a TimeLock profile except this app's own signup form.
+        // So an account made in another app, or through Google, authenticates
+        // fine and then fails here on the foreign key. Fill the gap at the
+        // moment of the first write — which is also the right moment for a
+        // TimeLock account to start existing.
+        const profileRes = await fetch('/api/auth/create-profile', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ full_name: user.user_metadata?.full_name }),
+        })
+        if (!profileRes.ok) {
+          toast.error('We could not set up your TimeLock account. Please try again.')
+          return
+        }
+
         const { data, error } = await supabase
           .from('timelock_capsules')
           .insert({
@@ -83,7 +101,7 @@ export default function NewCapsulePage() {
           .single()
 
         if (error) {
-          toast.error(error.message)
+          toast.error(humanizeDbError(error, 'Could not seal your capsule. Please try again.'))
           return
         }
         capsuleId = data.id
@@ -94,7 +112,7 @@ export default function NewCapsulePage() {
         if (contentError) {
           // A capsule without its letter is junk — undo the metadata row.
           await supabase.from('timelock_capsules').delete().eq('id', capsuleId)
-          toast.error(contentError.message)
+          toast.error(humanizeDbError(contentError, 'Could not save your letter. Please try again.'))
           return
         }
 
@@ -102,7 +120,11 @@ export default function NewCapsulePage() {
           const { error: hintError } = await supabase
             .from('timelock_capsule_hints')
             .insert(hintList.map((text, i) => ({ capsule_id: capsuleId, position: i + 1, text })))
-          if (hintError) toast.error(`Capsule sealed, but hints failed: ${hintError.message}`)
+          if (hintError) {
+            toast.error(
+              `Capsule sealed, but the hints did not save. ${humanizeDbError(hintError, 'You can still share the reveal link.')}`
+            )
+          }
         }
       } else {
         // A logged-out visitor has no identity to authorise against, so the
